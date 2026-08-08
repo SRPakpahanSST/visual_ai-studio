@@ -13,7 +13,6 @@
 Link aplikasi tetap aktif
 https://srpakpahansst-visual-ai-studio-app-pqcoxh.streamlit.app/
 
- (https://visual-ai-studio.streamlit.app)
 
 ## 🚀 Menjalankan Aplikasi
 1. Clone repository:
