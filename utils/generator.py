@@ -83,3 +83,59 @@ def generate_advanced_image(
         prompt, negative_prompt, steps, guidance_scale, seed,
         model_id, height, width, pipe, save_path
     )
+
+def generate_simple_image(
+    prompt,
+    negative_prompt="",
+    steps=25,
+    guidance_scale=7.5,
+    seed=42,
+    model_id="runwayml/stable-diffusion-v1-5",
+    height=384,
+    width=384,
+    pipe=None,
+    save_path=None
+):
+    if pipe is None:
+        pipe = load_base_pipeline(model_id)
+    
+    generator = torch.Generator(device=get_device()).manual_seed(seed)
+    
+    try:
+        with torch.inference_mode():
+            result = pipe(
+                prompt=prompt,
+                negative_prompt=negative_prompt if negative_prompt else None,
+                num_inference_steps=steps,
+                guidance_scale=guidance_scale,
+                generator=generator,
+                height=height,
+                width=width,
+                num_images_per_prompt=1
+            )
+    except IndexError as e:
+        # ✅ Fallback: jika DPM++ error, coba ganti ke scheduler yang lebih stabil
+        print(f"⚠️ Scheduler error: {e}. Mencoba fallback ke Euler A...")
+        from diffusers import EulerAncestralDiscreteScheduler
+        pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
+            pipe.scheduler.config,
+            use_karras_sigmas=True
+        )
+        with torch.inference_mode():
+            result = pipe(
+                prompt=prompt,
+                negative_prompt=negative_prompt if negative_prompt else None,
+                num_inference_steps=steps,
+                guidance_scale=guidance_scale,
+                generator=generator,
+                height=height,
+                width=width,
+                num_images_per_prompt=1
+            )
+    
+    image = result.images[0]
+    if save_path:
+        os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+        image.save(save_path)
+    
+    return image
