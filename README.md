@@ -10,7 +10,10 @@
 - **Batch Generation**: Hasilkan 4 gambar sekaligus dalam grid 2x2.
 - **Parameter Customization**: Atur guidance scale, inference steps, dan scheduler.
 
-Link aplikasi tetap aktif (https://visual-ai-studio.streamlit.app)
+Link aplikasi tetap aktif
+https://srpakpahansst-visual-ai-studio-app-pqcoxh.streamlit.app/
+
+ (https://visual-ai-studio.streamlit.app)
 
 ## 🚀 Menjalankan Aplikasi
 1. Clone repository:
