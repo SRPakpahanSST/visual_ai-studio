@@ -239,5 +239,70 @@ with tab4:
             except Exception as e:
                 st.error(f"❌ Error: {e}")
 
+# ============================================
+# CACHE PIPELINE (AGAR TIDAK RELOAD)
+# ============================================
+@st.cache_resource
+def get_pipeline(model_id, scheduler_name):
+    """Memuat pipeline sekali dan menyimpannya di cache"""
+    from diffusers import (
+        StableDiffusionPipeline,
+        DPMSolverMultistepScheduler,
+        EulerAncestralDiscreteScheduler,
+        DDIMScheduler
+    )
+    import torch
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    pipe = StableDiffusionPipeline.from_pretrained(
+        model_id,
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        safety_checker=None,
+        requires_safety_checker=False,
+        low_cpu_mem_usage=True
+    ).to(device)
+    
+    # ✅ Set scheduler dengan konfigurasi yang benar
+    scheduler_lower = scheduler_name.lower()
+    
+    if scheduler_lower == "dpm++":
+        # ✅ Konfigurasi DPM++ yang benar
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+            pipe.scheduler.config,
+            use_karras_sigmas=True,
+            algorithm_type="dpmsolver++",  # ✅ tambahkan
+            solver_type="midpoint",         # ✅ tambahkan
+            final_sigmas_type="zero"        # ✅ tambahkan
+        )
+    elif scheduler_lower == "euler a":
+        pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
+            pipe.scheduler.config,
+            use_karras_sigmas=True
+        )
+    elif scheduler_lower == "ddim":
+        pipe.scheduler = DDIMScheduler.from_config(
+            pipe.scheduler.config
+        )
+    else:
+        # Default ke DPM++ jika tidak dikenali
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+            pipe.scheduler.config,
+            use_karras_sigmas=True,
+            algorithm_type="dpmsolver++",
+            solver_type="midpoint",
+            final_sigmas_type="zero"
+        )
+    
+    if device == "cuda":
+        pipe.enable_attention_slicing()
+        pipe.enable_vae_slicing()
+        try:
+            pipe.enable_xformers_memory_efficient_attention()
+        except:
+            pass
+    
+    print(f"✅ Pipeline loaded with {scheduler_name} scheduler")
+    return pipe
+
 st.markdown("---")
 st.caption("VisualAI Studio - Dibuat untuk APINDO AI Innovation Challenge 2026")
