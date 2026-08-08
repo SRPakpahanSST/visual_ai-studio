@@ -3,9 +3,16 @@ from diffusers import StableDiffusionInpaintPipeline
 from PIL import Image
 import os
 import gc
-import cv2
 import numpy as np
 from .generator import get_device
+
+# Coba import cv2, jika gagal beri fallback
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    print("⚠️ opencv-python tidak terinstall. Fungsi create_auto_mask tidak tersedia.")
 
 def load_inpainting_pipeline(model_id="runwayml/stable-diffusion-inpainting"):
     device = get_device()
@@ -49,6 +56,8 @@ def inpaint_engine(image, mask, prompt, negative_prompt="", seed=9, guidance_sca
     return output
 
 def create_auto_mask(image, method='edge', threshold=128):
+    if not CV2_AVAILABLE:
+        raise ImportError("opencv-python tidak terinstall. Install dengan: pip install opencv-python")
     img_np = np.array(image.convert('RGB'))
     gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
     if method == 'edge':
