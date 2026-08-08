@@ -46,7 +46,6 @@ with st.sidebar:
         help="Algoritma sampling untuk diffusion"
     )
     
-    # ⭐ BARU: Ukuran gambar
     st.subheader("📐 Ukuran Gambar")
     img_height = st.slider("Tinggi (height)", 256, 768, 384, step=64)
     img_width = st.slider("Lebar (width)", 256, 768, 384, step=64)
@@ -56,13 +55,20 @@ with st.sidebar:
     st.caption(f"Device: {'GPU' if torch.cuda.is_available() else 'CPU'}")
 
 # ============================================
-# CACHE PIPELINE (AGAR TIDAK RELOAD)
+# ✅ CACHE PIPELINE (SATU DEFINISI)
 # ============================================
 @st.cache_resource
 def get_pipeline(model_id, scheduler_name):
     """Memuat pipeline sekali dan menyimpannya di cache"""
-    from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
+    from diffusers import (
+        StableDiffusionPipeline,
+        DPMSolverMultistepScheduler,
+        EulerAncestralDiscreteScheduler,
+        DDIMScheduler
+    )
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    
     pipe = StableDiffusionPipeline.from_pretrained(
         model_id,
         torch_dtype=torch.float16 if device == "cuda" else torch.float32,
@@ -70,12 +76,37 @@ def get_pipeline(model_id, scheduler_name):
         requires_safety_checker=False,
         low_cpu_mem_usage=True
     ).to(device)
-    # Set scheduler
-    if scheduler_name == "DPM++":
+    
+    # ✅ Set scheduler dengan konfigurasi yang benar
+    scheduler_lower = scheduler_name.lower()
+    
+    if scheduler_lower == "dpm++":
         pipe.scheduler = DPMSolverMultistepScheduler.from_config(
-            pipe.scheduler.config, use_karras_sigmas=True
+            pipe.scheduler.config,
+            use_karras_sigmas=True,
+            algorithm_type="dpmsolver++",
+            solver_type="midpoint",
+            final_sigmas_type="zero"
         )
-    # (untuk scheduler lain, bisa ditambahkan)
+    elif scheduler_lower == "euler a":
+        pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
+            pipe.scheduler.config,
+            use_karras_sigmas=True
+        )
+    elif scheduler_lower == "ddim":
+        pipe.scheduler = DDIMScheduler.from_config(
+            pipe.scheduler.config
+        )
+    else:
+        # Default ke DPM++ jika tidak dikenali
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+            pipe.scheduler.config,
+            use_karras_sigmas=True,
+            algorithm_type="dpmsolver++",
+            solver_type="midpoint",
+            final_sigmas_type="zero"
+        )
+    
     if device == "cuda":
         pipe.enable_attention_slicing()
         pipe.enable_vae_slicing()
@@ -83,6 +114,8 @@ def get_pipeline(model_id, scheduler_name):
             pipe.enable_xformers_memory_efficient_attention()
         except:
             pass
+    
+    print(f"✅ Pipeline loaded with {scheduler_name} scheduler on {device}")
     return pipe
 
 # ============================================
@@ -108,22 +141,20 @@ with tab1:
         mode = st.radio("Mode", ["Simple", "Advanced"], index=0)
         seed = st.number_input("Seed", value=222, step=1)
         if mode == "Simple":
-            steps = st.slider("Inference Steps", 10, 50, 20)      # ⬅️ turunkan default
+            steps = st.slider("Inference Steps", 10, 50, 20)
             guidance = st.slider("Guidance Scale", 1.0, 15.0, 7.5)
         else:
-            steps = st.slider("Inference Steps", 10, 100, 30)     # ⬅️ turunkan default
+            steps = st.slider("Inference Steps", 10, 100, 30)
             guidance = st.slider("Guidance Scale", 1.0, 20.0, 9.0)
         generate_btn = st.button("🚀 Generate", type="primary", use_container_width=True)
 
     if generate_btn:
         with st.spinner("Menghasilkan gambar..."):
-            # Ambil pipeline dari cache
             pipe = get_pipeline(model_id, scheduler_name)
-            # Generate dengan ukuran yang diatur
             if mode == "Simple":
                 img = generate_simple_image(
                     prompt_txt, neg_txt, steps, guidance, seed, model_id,
-                    height=img_height, width=img_width, pipe=pipe   # ⬅️ tambahkan pipe & ukuran
+                    height=img_height, width=img_width, pipe=pipe
                 )
             else:
                 img = generate_advanced_image(
@@ -217,7 +248,7 @@ with tab4:
     prompt_batch = st.text_area("Prompt (sama untuk semua)", value="astronaut on moon, digital art 2D, flat colors")
     neg_batch = st.text_area("Negative prompt (batch)", value="photorealistic, 3d render, blurry")
     seed_base = st.number_input("Seed awal", value=222, step=1)
-    steps_batch = st.slider("Steps", 10, 50, 25)   # ⬅️ turunkan default
+    steps_batch = st.slider("Steps", 10, 50, 25)
     guidance_batch = st.slider("Guidance", 1.0, 15.0, 7.5)
     if st.button("📊 Generate 4 Gambar"):
         with st.spinner("Menghasilkan 4 gambar..."):
@@ -225,7 +256,7 @@ with tab4:
                 results = batch_inference(
                     prompt_batch, neg_batch, 4, seed_base,
                     steps_batch, guidance_batch,
-                    height=img_height, width=img_width  # ⬅️ tambahkan ukuran
+                    height=img_height, width=img_width
                 )
                 titles = [f"Seed {seed_base+i}" for i in range(4)]
                 fig = display_grid(results, titles, rows=2, cols=2, figsize=(10, 10))
@@ -238,71 +269,6 @@ with tab4:
                         os.unlink(tmp.name)
             except Exception as e:
                 st.error(f"❌ Error: {e}")
-
-# ============================================
-# CACHE PIPELINE (AGAR TIDAK RELOAD)
-# ============================================
-@st.cache_resource
-def get_pipeline(model_id, scheduler_name):
-    """Memuat pipeline sekali dan menyimpannya di cache"""
-    from diffusers import (
-        StableDiffusionPipeline,
-        DPMSolverMultistepScheduler,
-        EulerAncestralDiscreteScheduler,
-        DDIMScheduler
-    )
-    import torch
-    
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    pipe = StableDiffusionPipeline.from_pretrained(
-        model_id,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-        safety_checker=None,
-        requires_safety_checker=False,
-        low_cpu_mem_usage=True
-    ).to(device)
-    
-    # ✅ Set scheduler dengan konfigurasi yang benar
-    scheduler_lower = scheduler_name.lower()
-    
-    if scheduler_lower == "dpm++":
-        # ✅ Konfigurasi DPM++ yang benar
-        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
-            pipe.scheduler.config,
-            use_karras_sigmas=True,
-            algorithm_type="dpmsolver++",  # ✅ tambahkan
-            solver_type="midpoint",         # ✅ tambahkan
-            final_sigmas_type="zero"        # ✅ tambahkan
-        )
-    elif scheduler_lower == "euler a":
-        pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
-            pipe.scheduler.config,
-            use_karras_sigmas=True
-        )
-    elif scheduler_lower == "ddim":
-        pipe.scheduler = DDIMScheduler.from_config(
-            pipe.scheduler.config
-        )
-    else:
-        # Default ke DPM++ jika tidak dikenali
-        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
-            pipe.scheduler.config,
-            use_karras_sigmas=True,
-            algorithm_type="dpmsolver++",
-            solver_type="midpoint",
-            final_sigmas_type="zero"
-        )
-    
-    if device == "cuda":
-        pipe.enable_attention_slicing()
-        pipe.enable_vae_slicing()
-        try:
-            pipe.enable_xformers_memory_efficient_attention()
-        except:
-            pass
-    
-    print(f"✅ Pipeline loaded with {scheduler_name} scheduler")
-    return pipe
 
 st.markdown("---")
 st.caption("VisualAI Studio - Dibuat untuk APINDO AI Innovation Challenge 2026")
