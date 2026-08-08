@@ -3,7 +3,17 @@ from PIL import Image
 from typing import List
 import os
 
-def batch_inference(prompt, negative_prompt="", num_images=4, seed_base=222, steps=30, guidance_scale=7.5, save_dir=None) -> List[Image.Image]:
+def batch_inference(
+    prompt,
+    negative_prompt="",
+    num_images=4,
+    seed_base=222,
+    steps=30,
+    guidance_scale=7.5,
+    height=384,
+    width=384,
+    save_dir=None
+) -> List[Image.Image]:
     results = []
     for i in range(num_images):
         seed = seed_base + i
@@ -17,6 +27,8 @@ def batch_inference(prompt, negative_prompt="", num_images=4, seed_base=222, ste
             steps=steps,
             guidance_scale=guidance_scale,
             seed=seed,
+            height=height,
+            width=width,
             save_path=save_path
         )
         results.append(img)
