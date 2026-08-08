@@ -30,8 +30,20 @@ def load_base_pipeline(model_id="runwayml/stable-diffusion-v1-5"):
             pass
     return pipe
 
-def generate_simple_image(prompt, negative_prompt="", steps=25, guidance_scale=7.5, seed=42, model_id="runwayml/stable-diffusion-v1-5", save_path=None):
-    pipe = load_base_pipeline(model_id)
+def generate_simple_image(
+    prompt,
+    negative_prompt="",
+    steps=25,
+    guidance_scale=7.5,
+    seed=42,
+    model_id="runwayml/stable-diffusion-v1-5",
+    height=384,          # ✅ tambahkan
+    width=384,           # ✅ tambahkan
+    pipe=None,
+    save_path=None
+):
+    if pipe is None:
+        pipe = load_base_pipeline(model_id)
     generator = torch.Generator(device=get_device()).manual_seed(seed)
     with torch.inference_mode():
         result = pipe(
@@ -40,6 +52,8 @@ def generate_simple_image(prompt, negative_prompt="", steps=25, guidance_scale=7
             num_inference_steps=steps,
             guidance_scale=guidance_scale,
             generator=generator,
+            height=height,    # ✅ gunakan
+            width=width,      # ✅ gunakan
             num_images_per_prompt=1
         )
     image = result.images[0]
@@ -52,5 +66,20 @@ def generate_simple_image(prompt, negative_prompt="", steps=25, guidance_scale=7
         torch.cuda.empty_cache()
     return image
 
-def generate_advanced_image(prompt, negative_prompt="", steps=35, guidance_scale=9.0, seed=42, model_id="runwayml/stable-diffusion-v1-5", save_path=None):
-    return generate_simple_image(prompt, negative_prompt, steps, guidance_scale, seed, model_id, save_path)
+def generate_advanced_image(
+    prompt,
+    negative_prompt="",
+    steps=35,
+    guidance_scale=9.0,
+    seed=42,
+    model_id="runwayml/stable-diffusion-v1-5",
+    height=384,
+    width=384,
+    pipe=None,
+    save_path=None
+):
+    # reuse simple with advanced defaults
+    return generate_simple_image(
+        prompt, negative_prompt, steps, guidance_scale, seed,
+        model_id, height, width, pipe, save_path
+    )
