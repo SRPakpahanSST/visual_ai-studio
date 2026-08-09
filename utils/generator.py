@@ -1,11 +1,13 @@
+# utils/generator.py
 import os
-# ============================================
-# FIX: Tokenizer issue di diffusers
-# ============================================
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import torch
-from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler, EulerAncestralDiscreteScheduler
+from diffusers import (
+    StableDiffusionPipeline,
+    DPMSolverMultistepScheduler,
+    EulerAncestralDiscreteScheduler
+)
 from PIL import Image
 import gc
 
@@ -23,8 +25,7 @@ def load_base_pipeline(model_id="runwayml/stable-diffusion-v1-5"):
         use_safetensors=True
     ).to(device)
     
-    # ✅ Gunakan Euler A sebagai default untuk stabilitas
-    from diffusers import EulerAncestralDiscreteScheduler
+    # ✅ Gunakan Euler A sebagai default (lebih stabil di CPU)
     pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
         pipe.scheduler.config,
         use_karras_sigmas=True
@@ -40,7 +41,7 @@ def load_base_pipeline(model_id="runwayml/stable-diffusion-v1-5"):
     return pipe
 
 # ============================================
-# ✅ generate_simple_image dengan fallback tokenizer
+# generate_simple_image
 # ============================================
 def generate_simple_image(
     prompt,
@@ -54,16 +55,13 @@ def generate_simple_image(
     pipe=None,
     save_path=None
 ):
-    """
-    Generate gambar dari teks prompt dengan parameter yang bisa diatur.
-    """
     if pipe is None:
         pipe = load_base_pipeline(model_id)
     
     device = get_device()
     generator = torch.Generator(device=device).manual_seed(seed)
     
-    # ✅ Bersihkan prompt dari karakter yang bermasalah
+    # ✅ Bersihkan prompt
     prompt = prompt.strip().replace('\n', ' ').replace('\r', ' ')
     if negative_prompt:
         negative_prompt = negative_prompt.strip().replace('\n', ' ').replace('\r', ' ')
@@ -81,8 +79,7 @@ def generate_simple_image(
                 num_images_per_prompt=1
             )
     except (IndexError, RuntimeError) as e:
-        # ✅ Fallback: coba dengan scheduler Euler A yang lebih stabil
-        print(f"⚠️ Error: {e}. Mencoba fallback ke Euler A...")
+        print(f"⚠️ Error: {e}. Fallback ke Euler A...")
         from diffusers import EulerAncestralDiscreteScheduler
         pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
             pipe.scheduler.config,
@@ -101,14 +98,11 @@ def generate_simple_image(
             )
     
     image = result.images[0]
-    
     if save_path:
         os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
         image.save(save_path)
     
-    # Cleanup
-    if pipe is not None:
-        del pipe
+    del pipe
     gc.collect()
     if get_device() == "cuda":
         torch.cuda.empty_cache()
