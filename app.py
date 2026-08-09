@@ -3,11 +3,13 @@
 # ============================================
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 import streamlit as st
 from PIL import Image
 import tempfile
 import torch
+import gc
 from utils import (
     generate_simple_image,
     generate_advanced_image,
@@ -46,7 +48,7 @@ with st.sidebar:
     
     scheduler_name = st.selectbox(
         "Scheduler",
-        ["Euler A", "DPM++", "DDIM"],  # ✅ Euler A sebagai default
+        ["Euler A", "DPM++", "DDIM"],
         index=0,
         help="Algoritma sampling untuk diffusion"
     )
@@ -79,7 +81,8 @@ def get_pipeline(model_id, scheduler_name):
         torch_dtype=torch.float16 if device == "cuda" else torch.float32,
         safety_checker=None,
         requires_safety_checker=False,
-        low_cpu_mem_usage=True
+        low_cpu_mem_usage=True,
+        use_safetensors=True
     ).to(device)
     
     # ✅ Set scheduler
@@ -177,9 +180,103 @@ with tab1:
                 st.error(f"❌ Error: {e}")
 
 # ============================================
-# TAB 2: INPAINTING (Sama seperti sebelumnya)
+# TAB 2: INPAINTING
 # ============================================
-# ... (kode TAB 2, 3, 4 tetap sama) ...
+with tab2:
+    st.subheader("Inpainting (Edit gambar dengan mask)")
+    uploaded_file = st.file_uploader("Upload gambar", type=["png", "jpg", "jpeg"])
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file).convert("RGB")
+        st.image(image, caption="Gambar asli", width=300)
+        mask_option = st.radio("Metode Mask", ["Manual (upload mask)", "Otomatis (edge detection)"])
+        mask = None
+        if mask_option == "Manual (upload mask)":
+            mask_file = st.file_uploader("Upload mask (putih = area yang akan diubah)", type=["png", "jpg"])
+            if mask_file is not None:
+                mask = Image.open(mask_file).convert("L")
+        else:
+            if st.button("Buat Mask Otomatis"):
+                try:
+                    mask = create_auto_mask(image, method='edge')
+                    st.image(mask, caption="Mask otomatis", width=300)
+                except ImportError as e:
+                    st.error(f"❌ {e}. Silakan upload mask manual.")
+                except Exception as e:
+                    st.error(f"❌ Gagal membuat mask: {e}")
+
+        if mask is not None:
+            prompt_inp = st.text_area("Prompt untuk inpainting", "a broken satellite floating in space, digital art 2D style")
+            neg_inp = st.text_area("Negative prompt (inpainting)", "photorealistic, 3d render, blurry")
+            seed_inp = st.number_input("Seed (inpainting)", value=9, step=1)
+            if st.button("🖌️ Jalankan Inpainting"):
+                with st.spinner("Proses inpainting..."):
+                    try:
+                        result = inpaint_engine(image, mask, prompt_inp, neg_inp, seed_inp)
+                        st.image(result, caption="Hasil Inpainting")
+                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                            result.save(tmp.name)
+                            with open(tmp.name, "rb") as f:
+                                st.download_button("📥 Download", data=f, file_name="inpainted.png", mime="image/png")
+                            os.unlink(tmp.name)
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+
+# ============================================
+# TAB 3: OUTPAINTING
+# ============================================
+with tab3:
+    st.subheader("Outpainting (Perluas gambar)")
+    out_file = st.file_uploader("Upload gambar untuk outpainting", type=["png", "jpg", "jpeg"])
+    if out_file is not None:
+        img_out = Image.open(out_file).convert("RGB")
+        st.image(img_out, caption="Gambar asli", width=300)
+        direction = st.selectbox("Arah perluasan", ["right", "left", "top", "bottom", "all"])
+        expand = st.slider("Jumlah piksel perluasan", 50, 300, 150)
+        prompt_out = st.text_area("Prompt outpainting", "space scene with stars, nebula, continues the space theme, digital art 2D")
+        neg_out = st.text_area("Negative prompt (outpainting)", "photorealistic, 3d render, blurry")
+        seed_out = st.number_input("Seed (outpainting)", value=42, step=1)
+        if st.button("🖼️ Jalankan Outpainting"):
+            with st.spinner("Memperluas gambar..."):
+                try:
+                    result = generate_outpainting(img_out, prompt_out, neg_out, expand, direction, seed_out)
+                    st.image(result, caption="Hasil Outpainting")
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                        result.save(tmp.name)
+                        with open(tmp.name, "rb") as f:
+                            st.download_button("📥 Download", data=f, file_name="outpainted.png", mime="image/png")
+                        os.unlink(tmp.name)
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+
+# ============================================
+# TAB 4: BATCH GENERATION
+# ============================================
+with tab4:
+    st.subheader("Batch Generation (4 gambar sekaligus)")
+    prompt_batch = st.text_area("Prompt (sama untuk semua)", value="astronaut on moon, digital art 2D, flat colors")
+    neg_batch = st.text_area("Negative prompt (batch)", value="photorealistic, 3d render, blurry")
+    seed_base = st.number_input("Seed awal", value=222, step=1)
+    steps_batch = st.slider("Steps", 10, 50, 25)
+    guidance_batch = st.slider("Guidance", 1.0, 15.0, 7.5)
+    if st.button("📊 Generate 4 Gambar"):
+        with st.spinner("Menghasilkan 4 gambar..."):
+            try:
+                results = batch_inference(
+                    prompt_batch, neg_batch, 4, seed_base,
+                    steps_batch, guidance_batch,
+                    height=img_height, width=img_width
+                )
+                titles = [f"Seed {seed_base+i}" for i in range(4)]
+                fig = display_grid(results, titles, rows=2, cols=2, figsize=(10, 10))
+                st.pyplot(fig)
+                for i, img in enumerate(results):
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                        img.save(tmp.name)
+                        with open(tmp.name, "rb") as f:
+                            st.download_button(f"📥 Download Image {i+1}", data=f, file_name=f"batch_{i+1}.png", mime="image/png")
+                        os.unlink(tmp.name)
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
 
 st.markdown("---")
 st.caption("VisualAI Studio - Dibuat untuk APINDO AI Innovation Challenge 2026")
