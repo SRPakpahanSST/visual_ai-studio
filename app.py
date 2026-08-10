@@ -1,7 +1,19 @@
 # app.py - Aplikasi Streamlit Utama
+
+# ============================================
+# IMPORT LIBRARY DASAR
+# ============================================
 import os
 import sys
 import subprocess
+import warnings
+warnings.filterwarnings('ignore')
+
+# ============================================
+# FIX: Environment variables untuk tokenizers
+# ============================================
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 # ============================================
 # FIX: Pastikan Pillow tersedia
@@ -13,11 +25,38 @@ except ImportError:
     from PIL import Image
 
 # ============================================
-# FIX: Environment variables untuk tokenizers
+# FORCE PRE-DOWNLOAD MODEL SAAT BUILD
 # ============================================
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+print("🔄 PRE-DOWNLOADING STABLE DIFFUSION MODEL...")
+try:
+    from diffusers import StableDiffusionPipeline
+    import torch
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"📱 Device: {device}")
+    
+    # Download model (akan otomatis ke cache)
+    pipe = StableDiffusionPipeline.from_pretrained(
+        "runwayml/stable-diffusion-v1-5",
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        safety_checker=None,
+        requires_safety_checker=False,
+        low_cpu_mem_usage=True,
+        use_safetensors=True
+    )
+    print("✅ MODEL PRE-DOWNLOAD SUCCESSFUL!")
+    
+    # Bersihkan memory
+    del pipe
+    if device == "cuda":
+        torch.cuda.empty_cache()
+        
+except Exception as e:
+    print(f"⚠️ Pre-download error (bisa diabaikan): {e}")
 
+# ============================================
+# IMPORT STREAMLIT & UTILS
+# ============================================
 import streamlit as st
 import tempfile
 import torch
