@@ -1,15 +1,25 @@
+--index-strategy unsafe-best-match
+
 streamlit==1.28.0
 diffusers==0.24.0
 transformers==4.36.0
 accelerate==0.25.0
+
+# PyTorch CPU-only
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0.0
 torchvision>=0.15.0
+
 opencv-python-headless>=4.8.0
-pillow>=10.1.0
+
+# ✅ Pillow versi pre-built (bukan source)
+pillow==10.1.0
+
 matplotlib>=3.7.0
-numpy>=1.24.0
+
+# ✅ Gunakan numpy versi pre-built
+numpy>=1.24.0,<2.0.0
+
 huggingface-hub>=0.20.0
 safetensors>=0.4.0
 tokenizers>=0.13.0
-
---index-strategy unsafe-best-match
