@@ -4,6 +4,7 @@ import os
 
 def prepare_outpainting(image, expand_pixels=150, direction='right', background_color=(20,20,40)):
     width, height = image.size
+    
     if direction == 'right':
         new_width = width + expand_pixels
         new_height = height
@@ -29,12 +30,13 @@ def prepare_outpainting(image, expand_pixels=150, direction='right', background_
         new_height = height + 2*expand_pixels
         paste_pos = (expand_pixels, expand_pixels)
         mask_region = None
-
+    
     expanded = Image.new('RGB', (new_width, new_height), background_color)
     expanded.paste(image, paste_pos)
-
+    
     mask = Image.new('L', (new_width, new_height), 0)
     draw = ImageDraw.Draw(mask)
+    
     if direction == 'all':
         draw.rectangle([0, 0, expand_pixels, new_height], fill=255)
         draw.rectangle([new_width - expand_pixels, 0, new_width, new_height], fill=255)
@@ -43,10 +45,15 @@ def prepare_outpainting(image, expand_pixels=150, direction='right', background_
     else:
         x1, y1, x2, y2 = mask_region
         draw.rectangle([x1, y1, x2, y2], fill=255)
-
+    
     return expanded, mask
 
-def generate_outpainting(image, prompt, negative_prompt="", expand_pixels=150, direction='right', seed=42, guidance_scale=8.0, num_inference_steps=60, save_path=None):
+def generate_outpainting(
+    image, prompt, negative_prompt="",
+    expand_pixels=150, direction='right',
+    seed=42, guidance_scale=8.0, num_inference_steps=60,
+    save_path=None
+):
     expanded, mask = prepare_outpainting(image, expand_pixels, direction)
     result = inpaint_engine(
         image=expanded,
