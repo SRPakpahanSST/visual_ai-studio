@@ -1,12 +1,24 @@
-# ============================================
-# FIX: Set environment variables untuk tokenizers
-# ============================================
+# app.py - Aplikasi Streamlit Utama
 import os
+import sys
+import subprocess
+
+# ============================================
+# FIX: Pastikan Pillow tersedia
+# ============================================
+try:
+    from PIL import Image
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pillow"])
+    from PIL import Image
+
+# ============================================
+# FIX: Environment variables untuk tokenizers
+# ============================================
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 import streamlit as st
-from PIL import Image
 import tempfile
 import torch
 import gc
@@ -62,7 +74,7 @@ with st.sidebar:
     st.caption(f"Device: {'GPU' if torch.cuda.is_available() else 'CPU'}")
 
 # ============================================
-# ✅ CACHE PIPELINE
+# CACHE PIPELINE
 # ============================================
 @st.cache_resource
 def get_pipeline(model_id, scheduler_name):
@@ -85,7 +97,6 @@ def get_pipeline(model_id, scheduler_name):
         use_safetensors=True
     ).to(device)
     
-    # ✅ Set scheduler
     scheduler_lower = scheduler_name.lower()
     
     if scheduler_lower == "euler a":
@@ -106,7 +117,6 @@ def get_pipeline(model_id, scheduler_name):
             pipe.scheduler.config
         )
     else:
-        # Default ke Euler A
         pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
             pipe.scheduler.config,
             use_karras_sigmas=True
