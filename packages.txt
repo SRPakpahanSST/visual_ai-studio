@@ -3,3 +3,4 @@ libjpeg-dev
 libpng-dev
 libtiff-dev
 libwebp-dev
+python3-pil
